@@ -28,6 +28,8 @@ class TwitchRecorder:
         self.disable_ffmpeg = False
         self.refresh = 15
         self.root_path = config.root_path
+        self.max_retry = 3
+        self.retry_count = 0
 
         # user configuration
         self.username = config.username
@@ -123,17 +125,26 @@ class TwitchRecorder:
             status, info = self.check_user()
             if status == TwitchResponseStatus.NOT_FOUND:
                 logging.error("username not found, invalid username or typo")
-                time.sleep(self.refresh)
+                break
             elif status == TwitchResponseStatus.ERROR:
                 logging.error("%s unexpected error. will try again in 5 minutes",
                               datetime.datetime.now().strftime("%Hh%Mm%Ss"))
-                time.sleep(300)
+                if self.retry_count < self.max_retry:
+                    time.sleep(60)
+                    self.retry_count += 1
+                else:
+                    break
             elif status == TwitchResponseStatus.OFFLINE:
                 logging.info("%s currently offline, checking again in %s seconds", self.username, self.refresh)
                 time.sleep(self.refresh)
+                break
             elif status == TwitchResponseStatus.UNAUTHORIZED:
                 logging.info("unauthorized, will attempt to log back in immediately")
-                self.access_token = self.fetch_access_token()
+                if self.retry_count < self.max_retry:
+                    self.access_token = self.fetch_access_token()
+                    self.retry_count += 1
+                else:
+                    break
             elif status == TwitchResponseStatus.ONLINE:
                 logging.info("%s online, stream recording in session", self.username)
 
@@ -161,6 +172,9 @@ class TwitchRecorder:
 
                 logging.info("processing is done, going back to checking...")
                 time.sleep(self.refresh)
+            else:
+                logging.info("Unexpected status : %s", status)
+                break
 
 
 def main(argv):
